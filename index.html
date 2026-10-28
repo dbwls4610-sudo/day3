@@ -13,6 +13,7 @@
         select, button { padding: 4px 8px; }
         #stats { margin-left: auto; font-size: 14px; }
         #map { height: calc(100vh - 50px); background: #0b0f1a; }
+        .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
         .pulse { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,60,60,.55);
                  animation: pulse 1.6s ease-out infinite; }
         @keyframes pulse { 0% { transform: scale(.3); opacity: 1 } 100% { transform: scale(3); opacity: 0 } }
@@ -43,8 +44,9 @@
         const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
 
         const map = L.map("map", { worldCopyJump: true }).setView([25, 130], 3)
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-            attribution: "&copy; OpenStreetMap contributors &copy; CARTO | Data: USGS", maxZoom: 18,
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors | Data: USGS", maxZoom: 19,
+            className: "dark-tiles",
         }).addTo(map)
         const layer = L.layerGroup().addTo(map)
 
@@ -52,7 +54,7 @@
         legend.onAdd = () => {
             const div = L.DomUtil.create("div", "legend")
             div.innerHTML = colors.map(([min, c], i) =>
-                `<div><i style="background:${c}"></i>M${min}${i === 0 ? "+" : i === colors.length - 1 ? " 미만 3" : ""}</div>`
+                `<div><i style="background:${c}"></i>${i === colors.length - 1 ? "M3 미만" : `M${min}+`}</div>`
             ).join("")
             return div
         }
