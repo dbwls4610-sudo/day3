@@ -1,4 +1,4 @@
-const { spots } = require("../제주대_JSON꺼내기_실습데이_8시간/jeju_spots.json");
+const { spots } = require("../data/jeju_spots.json");
 
 const MAX_RESULTS = 8;
 const AREAS = ["동쪽", "서쪽", "서귀포", "제주시"];
@@ -22,7 +22,39 @@ const find_spots = ({ area, indoor }) => {
     };
 };
 
-// Claude에 넘기는 도구 설명
+// WMO 날씨 코드 → 한글
+const weatherText = (c) =>
+    c === 0 ? "맑음" :
+    c <= 3 ? "구름" :
+    c <= 48 ? "안개" :
+    c <= 57 ? "이슬비" :
+    c <= 67 ? "비" :
+    c <= 77 ? "눈" :
+    c <= 82 ? "소나기" :
+    c <= 86 ? "눈보라" : "뇌우";
+
+// Open-Meteo(키 불필요)로 목록에 있는 장소의 현재 날씨를 조회한다.
+const get_weather = async ({ name }) => {
+    const spot = spots.find(s => s.name === name);
+    if (!spot) return { error: `'${name}'은(는) 목록에 없는 장소입니다.` };
+    const url = "https://api.open-meteo.com/v1/forecast" +
+        `?latitude=${spot.lat}&longitude=${spot.lon}` +
+        "&current=temperature_2m,precipitation,weather_code,wind_speed_10m" +
+        "&daily=precipitation_probability_max&timezone=Asia%2FSeoul&forecast_days=1";
+    const res = await fetch(url);
+    if (!res.ok) return { error: `날씨 조회 실패 (${res.status})` };
+    const { current, daily } = await res.json();
+    return {
+        name: spot.name,
+        weather: weatherText(current.weather_code),
+        temperature_c: current.temperature_2m,
+        precipitation_mm: current.precipitation,
+        wind_kmh: current.wind_speed_10m,
+        rain_probability_max_percent: daily.precipitation_probability_max[0],
+    };
+};
+
+// 모델에 넘기는 도구 설명 (chat.js에서 Gemini의 functionDeclarations 형식으로 변환)
 const toolDefinitions = [
     {
         name: "find_spots",
@@ -47,8 +79,21 @@ const toolDefinitions = [
             required: ["area"],
         },
     },
+    {
+        name: "get_weather",
+        description:
+            "find_spots로 찾은 장소 한 곳의 현재 날씨(날씨 · 기온 · 강수량 · 풍속)와 오늘 최대 강수확률을 조회한다. " +
+            "name에는 find_spots 결과에 나온 장소 이름을 그대로 넣는다. 목록 밖의 장소는 조회할 수 없다.",
+        input_schema: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "find_spots 결과의 장소 이름" },
+            },
+            required: ["name"],
+        },
+    },
 ];
 
-const tools = { find_spots };
+const tools = { find_spots, get_weather };
 
-module.exports = { find_spots, tools, toolDefinitions };
+module.exports = { find_spots, get_weather, tools, toolDefinitions, spots };

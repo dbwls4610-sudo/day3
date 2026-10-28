@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 지진 지도</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; font-family: sans-serif; background: #0b0f1a; color: #e8ecf5; }
+        header { padding: 8px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        h1 { font-size: 18px; margin: 0; }
+        select, button { padding: 4px 8px; }
+        #stats { margin-left: auto; font-size: 14px; }
+        #map { height: calc(100vh - 50px); background: #0b0f1a; }
+        .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
+        .pulse { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,60,60,.55);
+                 animation: pulse 1.6s ease-out infinite; }
+        @keyframes pulse { 0% { transform: scale(.3); opacity: 1 } 100% { transform: scale(3); opacity: 0 } }
+        .legend { background: rgba(11,15,26,.85); color: #e8ecf5; padding: 6px 10px; border-radius: 6px; line-height: 1.5; font-size: 12px; }
+        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🌋 실시간 지진 지도</h1>
+        <select id="period">
+            <option value="all_hour">지난 1시간</option>
+            <option value="all_day" selected>지난 24시간</option>
+            <option value="all_week">지난 7일</option>
+        </select>
+        <select id="minMag">
+            <option value="0">모든 규모</option>
+            <option value="2.5">M2.5 이상</option>
+            <option value="4.5">M4.5 이상</option>
+        </select>
+        <span id="stats">불러오는 중…</span>
+    </header>
+    <div id="map"></div>
+    <script>
+        const FEED = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/"
+        const colors = [[6, "#ff2d55"], [5, "#ff6b35"], [4, "#ffb020"], [3, "#ffe66d"], [0, "#5ce1e6"]]
+        const colorOf = m => colors.find(([min]) => m >= min)[1]
+        const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
+
+        const map = L.map("map", { worldCopyJump: true }).setView([25, 130], 3)
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors | Data: USGS", maxZoom: 19,
+            className: "dark-tiles",
+        }).addTo(map)
+        const layer = L.layerGroup().addTo(map)
+
+        const legend = L.control({ position: "bottomright" })
+        legend.onAdd = () => {
+            const div = L.DomUtil.create("div", "legend")
+            div.innerHTML = colors.map(([min, c], i) =>
+                `<div><i style="background:${c}"></i>${i === colors.length - 1 ? "M3 미만" : `M${min}+`}</div>`
+            ).join("")
+            return div
+        }
+        legend.addTo(map)
+
+        async function load() {
+            const period = document.getElementById("period").value
+            const minMag = +document.getElementById("minMag").value
+            const stats = document.getElementById("stats")
+            try {
+                const data = await (await fetch(`${FEED}${period}.geojson`)).json()
+                const quakes = data.features.filter(f => (f.properties.mag ?? 0) >= minMag)
+                layer.clearLayers()
+                let max = 0
+                for (const f of quakes) {
+                    const [lon, lat, depth] = f.geometry.coordinates
+                    const p = f.properties
+                    const mag = p.mag ?? 0
+                    max = Math.max(max, mag)
+                    const popup = `<b>M${mag.toFixed(1)}</b> ${esc(p.place)}<br>` +
+                        `${new Date(p.time).toLocaleString("ko-KR")}<br>깊이 ${depth} km<br>` +
+                        `<a href="${esc(p.url)}" target="_blank" rel="noopener">USGS 상세</a>`
+                    L.circleMarker([lat, lon], {
+                        radius: Math.max(3, mag * 3), color: colorOf(mag), weight: 1,
+                        fillColor: colorOf(mag), fillOpacity: 0.55,
+                    }).addTo(layer).bindPopup(popup)
+                    if (mag >= 5) {
+                        L.marker([lat, lon], {
+                            icon: L.divIcon({ className: "", html: '<div class="pulse"></div>', iconSize: [24, 24] }),
+                            interactive: false,
+                        }).addTo(layer)
+                    }
+                }
+                stats.textContent = `${quakes.length}건 · 최대 M${max.toFixed(1)} · ${new Date().toLocaleTimeString("ko-KR")} 갱신`
+            } catch {
+                stats.textContent = "데이터를 불러오지 못했습니다"
+            }
+        }
+
+        document.getElementById("period").addEventListener("change", load)
+        document.getElementById("minMag").addEventListener("change", load)
+        load()
+        setInterval(load, 60000)
+    </script>
+</body>
+</html>

@@ -3,101 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 지진 지도</title>
+    <title>제주 여행 추천 에이전트</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { margin: 0; font-family: sans-serif; background: #0b0f1a; color: #e8ecf5; }
-        header { padding: 8px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        h1 { font-size: 18px; margin: 0; }
-        select, button { padding: 4px 8px; }
-        #stats { margin-left: auto; font-size: 14px; }
-        #map { height: calc(100vh - 50px); background: #0b0f1a; }
-        .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
-        .pulse { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,60,60,.55);
-                 animation: pulse 1.6s ease-out infinite; }
-        @keyframes pulse { 0% { transform: scale(.3); opacity: 1 } 100% { transform: scale(3); opacity: 0 } }
-        .legend { background: rgba(11,15,26,.85); color: #e8ecf5; padding: 6px 10px; border-radius: 6px; line-height: 1.5; font-size: 12px; }
-        .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+        body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        form { padding: 8px; display: flex; gap: 8px; }
+        input { flex: 1; padding: 8px; font-size: 16px; }
+        button { padding: 8px 16px; }
+        main { flex: 1; display: flex; min-height: 0; }
+        #chat { width: 40%; overflow-y: auto; padding: 12px; box-sizing: border-box; }
+        #map { flex: 1; }
+        .step { font-size: 12px; color: #666; margin: 2px 0; }
+        .user { font-weight: bold; margin: 12px 0 4px; }
+        .bot { white-space: pre-wrap; margin: 4px 0 12px; }
+        @media (max-width: 700px) { main { flex-direction: column-reverse; } #chat { width: auto; height: 50%; } }
     </style>
 </head>
 <body>
-    <header>
-        <h1>🌋 실시간 지진 지도</h1>
-        <select id="period">
-            <option value="all_hour">지난 1시간</option>
-            <option value="all_day" selected>지난 24시간</option>
-            <option value="all_week">지난 7일</option>
-        </select>
-        <select id="minMag">
-            <option value="0">모든 규모</option>
-            <option value="2.5">M2.5 이상</option>
-            <option value="4.5">M4.5 이상</option>
-        </select>
-        <span id="stats">불러오는 중…</span>
-    </header>
-    <div id="map"></div>
+    <form id="form">
+        <input id="q" placeholder="예: 비 오는 날 서귀포에서 갈 만한 곳 추천해줘" autocomplete="off">
+        <button>추천받기</button>
+    </form>
+    <main>
+        <div id="chat"></div>
+        <div id="map"></div>
+    </main>
     <script>
-        const FEED = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/"
-        const colors = [[6, "#ff2d55"], [5, "#ff6b35"], [4, "#ffb020"], [3, "#ffe66d"], [0, "#5ce1e6"]]
-        const colorOf = m => colors.find(([min]) => m >= min)[1]
-        const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
-
-        const map = L.map("map", { worldCopyJump: true }).setView([25, 130], 3)
+        const map = L.map("map").setView([33.38, 126.55], 10)
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "&copy; OpenStreetMap contributors | Data: USGS", maxZoom: 19,
-            className: "dark-tiles",
+            attribution: "&copy; OpenStreetMap contributors | Weather: Open-Meteo", maxZoom: 19,
         }).addTo(map)
         const layer = L.layerGroup().addTo(map)
+        const chat = document.getElementById("chat")
+        const history = []
 
-        const legend = L.control({ position: "bottomright" })
-        legend.onAdd = () => {
-            const div = L.DomUtil.create("div", "legend")
-            div.innerHTML = colors.map(([min, c], i) =>
-                `<div><i style="background:${c}"></i>${i === colors.length - 1 ? "M3 미만" : `M${min}+`}</div>`
-            ).join("")
+        const add = (cls, text) => {
+            const div = document.createElement("div")
+            div.className = cls
+            div.textContent = text
+            chat.appendChild(div)
+            chat.scrollTop = chat.scrollHeight
             return div
         }
-        legend.addTo(map)
 
-        async function load() {
-            const period = document.getElementById("period").value
-            const minMag = +document.getElementById("minMag").value
-            const stats = document.getElementById("stats")
+        document.getElementById("form").addEventListener("submit", async (e) => {
+            e.preventDefault()
+            const input = document.getElementById("q")
+            const message = input.value.trim()
+            if (!message) return
+            input.value = ""
+            add("user", message)
+            const wait = add("step", "에이전트가 도구를 사용 중…")
             try {
-                const data = await (await fetch(`${FEED}${period}.geojson`)).json()
-                const quakes = data.features.filter(f => (f.properties.mag ?? 0) >= minMag)
-                layer.clearLayers()
-                let max = 0
-                for (const f of quakes) {
-                    const [lon, lat, depth] = f.geometry.coordinates
-                    const p = f.properties
-                    const mag = p.mag ?? 0
-                    max = Math.max(max, mag)
-                    const popup = `<b>M${mag.toFixed(1)}</b> ${esc(p.place)}<br>` +
-                        `${new Date(p.time).toLocaleString("ko-KR")}<br>깊이 ${depth} km<br>` +
-                        `<a href="${esc(p.url)}" target="_blank" rel="noopener">USGS 상세</a>`
-                    L.circleMarker([lat, lon], {
-                        radius: Math.max(3, mag * 3), color: colorOf(mag), weight: 1,
-                        fillColor: colorOf(mag), fillOpacity: 0.55,
-                    }).addTo(layer).bindPopup(popup)
-                    if (mag >= 5) {
-                        L.marker([lat, lon], {
-                            icon: L.divIcon({ className: "", html: '<div class="pulse"></div>', iconSize: [24, 24] }),
-                            interactive: false,
-                        }).addTo(layer)
-                    }
-                }
-                stats.textContent = `${quakes.length}건 · 최대 M${max.toFixed(1)} · ${new Date().toLocaleTimeString("ko-KR")} 갱신`
-            } catch {
-                stats.textContent = "데이터를 불러오지 못했습니다"
-            }
-        }
+                const res = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ message, history }),
+                })
+                const data = await res.json()
+                wait.remove()
+                if (data.error) return add("bot", "오류: " + data.error)
+                for (const s of data.steps) add("step", `🔧 ${s.tool}(${JSON.stringify(s.input)})`)
+                add("bot", data.answer)
+                history.push({ role: "user", content: message }, { role: "assistant", content: data.answer })
 
-        document.getElementById("period").addEventListener("change", load)
-        document.getElementById("minMag").addEventListener("change", load)
-        load()
-        setInterval(load, 60000)
+                layer.clearLayers()
+                for (const s of data.spots) {
+                    L.marker([s.lat, s.lon]).addTo(layer)
+                        .bindPopup(`<b>${s.name}</b><br>${s.area} · ${s.indoor ? "실내" : "야외"}<br>${s.desc}`)
+                }
+                if (data.spots.length) map.fitBounds(data.spots.map(s => [s.lat, s.lon]), { padding: [40, 40], maxZoom: 12 })
+            } catch (err) {
+                wait.remove()
+                add("bot", "요청에 실패했습니다: " + err.message)
+            }
+        })
     </script>
 </body>
 </html>
