@@ -27,15 +27,6 @@
     </form>
     <div id="map"></div>
     <script>
-        // 지역 중심점(대략적인 위치). 개별 장소 좌표는 데이터에 없으므로 지역 중심에 모아서 표시한다.
-        const centers = {
-            "동쪽(성산)": [33.4584, 126.9425],
-            "동쪽(구좌)": [33.5240, 126.8600],
-            "제주시":     [33.4996, 126.5312],
-            "서쪽(한림)": [33.4140, 126.2650],
-            "서쪽(안덕)": [33.2500, 126.3600],
-            "서귀포":     [33.2540, 126.5600],
-        }
         const MAX = 8
 
         const map = L.map("map").setView([33.38, 126.55], 10)
@@ -44,7 +35,7 @@
         }).addTo(map)
         const layer = L.layerGroup().addTo(map)
 
-        const spotsPromise = fetch("jeju_spots.json").then(r => r.json()).then(d => d.spots)
+        const spotsPromise = fetch("제주대_JSON꺼내기_실습데이_8시간/jeju_spots.json").then(r => r.json()).then(d => d.spots)
 
         document.getElementById("form").addEventListener("submit", async (e) => {
             e.preventDefault()
@@ -52,23 +43,18 @@
             const indoorValue = document.getElementById("indoor").value
             const spots = await spotsPromise
             const found = spots.filter(s =>
-                (s.area === area || s.area.startsWith(area + "(")) &&
+                s.area === area &&
                 (indoorValue === "" || s.indoor === (indoorValue === "true"))
             )
             const shown = found.slice(0, MAX)
             document.getElementById("msg").textContent = `${found.length}곳 중 ${shown.length}곳 표시`
 
             layer.clearLayers()
-            const groups = {}
-            for (const s of shown) (groups[s.area] ??= []).push(s)
-            const points = []
-            for (const [a, list] of Object.entries(groups)) {
-                const items = list.map(s => `<li>${s.name} (${s.indoor ? "실내" : "야외"}, ${s.type})</li>`).join("")
-                L.marker(centers[a]).addTo(layer)
-                    .bindPopup(`<b>${a}</b><ul style="padding-left:16px;margin:4px 0">${items}</ul>`)
-                points.push(centers[a])
+            for (const s of shown) {
+                L.marker([s.lat, s.lon]).addTo(layer)
+                    .bindPopup(`<b>${s.name}</b><br>${s.area} · ${s.indoor ? "실내" : "야외"}<br>${s.desc}`)
             }
-            if (points.length) map.fitBounds(points, { padding: [60, 60], maxZoom: 12 })
+            if (shown.length) map.fitBounds(shown.map(s => [s.lat, s.lon]), { padding: [60, 60], maxZoom: 13 })
         })
     </script>
 </body>
