@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        let data = {
+            "a1":[7,8,9],
+            "a2":[11,21,31],
+            "a3": [37,38,39],
+        }
+
+        const show = (id) => console.log(id+"를 보여줘")
+        for (let i = 1; i <= Object.keys(data).length; i++) {
+            for (const element of data["a"+i]) {
+                console.log(element+" ")
+                show(element)
+            }
+        }
+
+
+    </script>
+</body>
+</html>
